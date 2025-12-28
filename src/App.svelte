@@ -7,6 +7,7 @@
   import Sidebar from '@/lib/components/chat/Sidebar.svelte';
   import ChatWindow from '@/lib/components/chat/ChatWindow.svelte';
   import SearchUserModal from '@/lib/components/chat/SearchUserModal.svelte';
+  import CreateGroupModal from '@/lib/components/chat/CreateGroupModal.svelte';
   import ProfileModal from '@/lib/components/profile/ProfileModal.svelte';
   import CallModal from '@/lib/components/call/CallModal.svelte';
   import { user } from '@/lib/stores/auth';
@@ -14,11 +15,14 @@
   import { chats } from '@/lib/stores/chat';
   import { initCallListener, cleanupCallListener } from '@/lib/stores/call';
   import { fade, fly } from 'svelte/transition';
+  import PermissionModal from '@/lib/components/ui/PermissionModal.svelte';
   
   let view: 'login' | 'register' = 'login';
   let activeChat: any = null;
   let showNewChatModal = false;
+  let showCreateGroupModal = false;
   let showProfileModal = false;
+  let showPermissionModal = false;
   let isMobile = false;
 
   // Check if mobile
@@ -34,6 +38,10 @@
   // Initialize call listener when user changes
   $: if ($user) {
     initCallListener($user.id);
+    // Show permission modal on first login
+    if (!localStorage.getItem('permissions_requested')) {
+      showPermissionModal = true;
+    }
   } else {
     cleanupCallListener();
   }
@@ -91,6 +99,7 @@
         <Sidebar 
           activeChatId={activeChat?.id} 
           on:newChat={() => showNewChatModal = true}
+          on:newGroup={() => showCreateGroupModal = true}
           on:openProfile={() => showProfileModal = true}
           on:click={handleChatSelect}
         />
@@ -115,8 +124,22 @@
     {#if showProfileModal}
       <ProfileModal on:close={() => showProfileModal = false} />
     {/if}
+
+    {#if showCreateGroupModal}
+      <CreateGroupModal 
+        on:close={() => showCreateGroupModal = false}
+        on:created={(e) => {
+          activeChat = { id: e.detail, name: 'Loading...', avatar: '' };
+          showCreateGroupModal = false;
+        }}
+      />
+    {/if}
     
     <CallModal />
+
+    {#if showPermissionModal}
+      <PermissionModal on:close={() => showPermissionModal = false} />
+    {/if}
   {/if}
 </main>
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Search, Settings, Edit, LogOut } from 'lucide-svelte';
+  import { Search, Settings, Edit, LogOut, Users } from 'lucide-svelte';
   import { createEventDispatcher, onMount } from 'svelte';
   import ChatItem from './ChatItem.svelte';
   import { chats, fetchChats, initChatStore } from '@/lib/stores/chat';
@@ -47,6 +47,13 @@
         />
       </div>
       <div class="header-actions">
+        <button 
+          class="icon-btn" 
+          title="New Group" 
+          on:click={() => dispatch('newGroup')}
+        >
+          <Users size={20} />
+        </button>
         <button 
           class="icon-btn" 
           title="New Chat" 
