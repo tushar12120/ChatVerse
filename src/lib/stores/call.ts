@@ -19,16 +19,14 @@ export const callData = writable<{
 let peerConnection: RTCPeerConnection | null = null;
 let callChannel: any = null;
 let targetChannel: any = null;
+let pendingCandidates: RTCIceCandidateInit[] = []; // Buffer for ICE candidates
 
-// ICE Servers with TURN for better mobile connectivity
+// ICE Servers
 const rtcConfig: RTCConfiguration = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        // Free TURN servers (for testing - replace with your own in production)
         {
             urls: 'turn:openrelay.metered.ca:80',
             username: 'openrelayproject',
@@ -43,12 +41,20 @@ const rtcConfig: RTCConfiguration = {
     iceCandidatePoolSize: 10
 };
 
-// Audio constraints optimized for mobile
-const audioConstraints: MediaTrackConstraints = {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true
-};
+// Add pending ICE candidates
+async function addPendingCandidates() {
+    if (!peerConnection || !peerConnection.remoteDescription) return;
+
+    console.log(`📦 Adding ${pendingCandidates.length} buffered ICE candidates`);
+    for (const candidate of pendingCandidates) {
+        try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+            console.error('Error adding buffered candidate:', err);
+        }
+    }
+    pendingCandidates = [];
+}
 
 // Initialize Call Listener
 export async function initCallListener(userId: string) {
@@ -56,10 +62,12 @@ export async function initCallListener(userId: string) {
         supabase.removeChannel(callChannel);
     }
 
+    pendingCandidates = [];
+
     callChannel = supabase
         .channel(`calls:${userId}`)
         .on('broadcast', { event: 'incoming-call' }, async (payload) => {
-            console.log('📞 Incoming call:', payload);
+            console.log('📞 Incoming call:', payload.payload.callerName);
             callData.set(payload.payload);
             callStatus.set('incoming');
         })
@@ -69,6 +77,7 @@ export async function initCallListener(userId: string) {
             if (peerConnection && answer) {
                 try {
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                    await addPendingCandidates();
                     callStatus.set('connected');
                 } catch (err) {
                     console.error('Error setting remote description:', err);
@@ -76,13 +85,21 @@ export async function initCallListener(userId: string) {
             }
         })
         .on('broadcast', { event: 'ice-candidate' }, async (payload) => {
-            console.log('🧊 ICE candidate received');
-            if (peerConnection && payload.payload.candidate) {
-                try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(payload.payload.candidate));
-                } catch (err) {
-                    console.error('Error adding ICE candidate:', err);
-                }
+            const candidate = payload.payload.candidate;
+            if (!candidate) return;
+
+            // Buffer if remote description not set yet
+            if (!peerConnection || !peerConnection.remoteDescription) {
+                console.log('🧊 Buffering ICE candidate');
+                pendingCandidates.push(candidate);
+                return;
+            }
+
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                console.log('🧊 ICE candidate added');
+            } catch (err) {
+                console.error('Error adding ICE candidate:', err);
             }
         })
         .on('broadcast', { event: 'call-ended' }, () => {
@@ -90,7 +107,7 @@ export async function initCallListener(userId: string) {
             endCall();
         })
         .subscribe((status) => {
-            console.log('📡 Call channel status:', status);
+            console.log('📡 Call channel:', status);
         });
 }
 
@@ -101,6 +118,7 @@ export async function startCall(chatId: string, targetUserId: string, targetUser
         if (!user) return;
 
         console.log('📞 Starting call to:', targetUserName);
+        pendingCandidates = [];
 
         callStatus.set('calling');
         callData.set({
@@ -110,38 +128,40 @@ export async function startCall(chatId: string, targetUserId: string, targetUser
             targetUserId
         });
 
-        // Get audio with mobile-optimized constraints
-        console.log('🎤 Requesting microphone...');
+        // Get audio
         const stream = await navigator.mediaDevices.getUserMedia({
-            audio: audioConstraints,
+            audio: { echoCancellation: true, noiseSuppression: true },
             video: false
         });
-        console.log('🎤 Microphone access granted');
+        console.log('🎤 Microphone granted');
         localStream.set(stream);
 
         // Create peer connection
         peerConnection = new RTCPeerConnection(rtcConfig);
-        console.log('🔌 Peer connection created');
 
         // Add tracks
         stream.getTracks().forEach(track => {
-            console.log('➕ Adding track:', track.kind);
             peerConnection!.addTrack(track, stream);
         });
 
         // Handle remote stream
         peerConnection.ontrack = (event) => {
-            console.log('🔊 Remote track received:', event.track.kind);
+            console.log('🔊 Remote audio received');
             remoteStream.set(event.streams[0]);
         };
 
         // Subscribe to target's channel FIRST
         targetChannel = supabase.channel(`calls:${targetUserId}`);
 
-        // Handle ICE candidates
+        await new Promise<void>((resolve) => {
+            targetChannel.subscribe((status: string) => {
+                if (status === 'SUBSCRIBED') resolve();
+            });
+        });
+
+        // Handle ICE candidates AFTER channel is subscribed
         peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
-                console.log('🧊 Sending ICE candidate');
                 targetChannel.send({
                     type: 'broadcast',
                     event: 'ice-candidate',
@@ -150,41 +170,17 @@ export async function startCall(chatId: string, targetUserId: string, targetUser
             }
         };
 
-        // Log connection states
-        peerConnection.onconnectionstatechange = () => {
-            console.log('🔌 Connection state:', peerConnection?.connectionState);
-        };
-
         peerConnection.oniceconnectionstatechange = () => {
-            console.log('🧊 ICE state:', peerConnection?.iceConnectionState);
+            console.log('🧊 ICE:', peerConnection?.iceConnectionState);
         };
 
-        peerConnection.onicegatheringstatechange = () => {
-            console.log('📦 ICE gathering:', peerConnection?.iceGatheringState);
+        peerConnection.onconnectionstatechange = () => {
+            console.log('🔌 Connection:', peerConnection?.connectionState);
         };
 
-        // Create offer
-        const offer = await peerConnection.createOffer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: false
-        });
+        // Create and set offer
+        const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
-        console.log('📤 Offer created');
-
-        // Wait for subscription
-        await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Channel subscription timeout'));
-            }, 5000);
-
-            targetChannel.subscribe((status: string) => {
-                console.log('📡 Target channel:', status);
-                if (status === 'SUBSCRIBED') {
-                    clearTimeout(timeout);
-                    resolve();
-                }
-            });
-        });
 
         // Send call invitation
         await targetChannel.send({
@@ -194,11 +190,11 @@ export async function startCall(chatId: string, targetUserId: string, targetUser
                 chatId,
                 callerId: user.id,
                 callerName: user.user_metadata?.full_name || 'User',
-                offer: offer
+                offer: peerConnection.localDescription
             }
         });
 
-        console.log('📤 Call invitation sent');
+        console.log('📤 Call sent');
         toasts.success('Calling...');
 
     } catch (err: any) {
@@ -217,40 +213,43 @@ export async function answerCall() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        console.log('📞 Answering call from:', data.callerName);
+        console.log('📞 Answering:', data.callerName);
+        pendingCandidates = [];
 
         // Get audio
-        console.log('🎤 Requesting microphone...');
         const stream = await navigator.mediaDevices.getUserMedia({
-            audio: audioConstraints,
+            audio: { echoCancellation: true, noiseSuppression: true },
             video: false
         });
-        console.log('🎤 Microphone access granted');
+        console.log('🎤 Microphone granted');
         localStream.set(stream);
 
         // Create peer connection
         peerConnection = new RTCPeerConnection(rtcConfig);
-        console.log('🔌 Peer connection created');
 
         // Add tracks
         stream.getTracks().forEach(track => {
-            console.log('➕ Adding track:', track.kind);
             peerConnection!.addTrack(track, stream);
         });
 
         // Handle remote stream
         peerConnection.ontrack = (event) => {
-            console.log('🔊 Remote track received:', event.track.kind);
+            console.log('🔊 Remote audio received');
             remoteStream.set(event.streams[0]);
         };
 
         // Subscribe to caller's channel
         targetChannel = supabase.channel(`calls:${data.callerId}`);
 
+        await new Promise<void>((resolve) => {
+            targetChannel.subscribe((status: string) => {
+                if (status === 'SUBSCRIBED') resolve();
+            });
+        });
+
         // Handle ICE candidates
         peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
-                console.log('🧊 Sending ICE candidate');
                 targetChannel.send({
                     type: 'broadcast',
                     event: 'ice-candidate',
@@ -259,46 +258,26 @@ export async function answerCall() {
             }
         };
 
-        // Log states
-        peerConnection.onconnectionstatechange = () => {
-            console.log('🔌 Connection state:', peerConnection?.connectionState);
-        };
-
         peerConnection.oniceconnectionstatechange = () => {
-            console.log('🧊 ICE state:', peerConnection?.iceConnectionState);
+            console.log('🧊 ICE:', peerConnection?.iceConnectionState);
         };
 
-        // Set remote description
+        // Set remote description (offer)
         if (data.offer) {
-            console.log('📥 Setting remote offer');
             await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            console.log('📥 Remote offer set');
+            await addPendingCandidates();
         }
 
         // Create answer
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
-        console.log('📤 Answer created');
-
-        // Wait for subscription
-        await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Channel subscription timeout'));
-            }, 5000);
-
-            targetChannel.subscribe((status: string) => {
-                console.log('📡 Caller channel:', status);
-                if (status === 'SUBSCRIBED') {
-                    clearTimeout(timeout);
-                    resolve();
-                }
-            });
-        });
 
         // Send answer
         await targetChannel.send({
             type: 'broadcast',
             event: 'call-answered',
-            payload: { answer: answer }
+            payload: { answer: peerConnection.localDescription }
         });
 
         console.log('📤 Answer sent');
@@ -318,10 +297,7 @@ export function endCall() {
 
     const local = get(localStream);
     if (local) {
-        local.getTracks().forEach(track => {
-            track.stop();
-            console.log('⏹️ Stopped track:', track.kind);
-        });
+        local.getTracks().forEach(track => track.stop());
     }
 
     if (peerConnection) {
@@ -329,20 +305,17 @@ export function endCall() {
         peerConnection = null;
     }
 
-    const data = get(callData);
-    if (data && targetChannel) {
+    if (targetChannel) {
         targetChannel.send({
             type: 'broadcast',
             event: 'call-ended',
             payload: {}
         });
-    }
-
-    if (targetChannel) {
         supabase.removeChannel(targetChannel);
         targetChannel = null;
     }
 
+    pendingCandidates = [];
     callStatus.set('idle');
     callData.set(null);
     remoteStream.set(null);
