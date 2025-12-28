@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Phone, PhoneOff, Volume2 } from 'lucide-svelte';
-  import { onMount } from 'svelte';
   import { callStatus, callData, answerCall, endCall, remoteStream } from '@/lib/stores/call';
 
   $: isIncoming = $callStatus === 'incoming';
@@ -8,67 +7,56 @@
   $: isConnected = $callStatus === 'connected';
   $: showModal = isIncoming || isCalling || isConnected;
 
-  let audioElement: HTMLAudioElement;
+  let audioRef: HTMLAudioElement;
   let audioPlaying = false;
 
-  // Play audio when remote stream is available
-  $: if ($remoteStream && audioElement) {
-    playAudio($remoteStream);
-  }
-
-  async function playAudio(stream: MediaStream) {
-    if (!audioElement) return;
-    
-    audioElement.srcObject = stream;
-    audioElement.muted = false;
-    audioElement.volume = 1;
-    
-    try {
-      await audioElement.play();
-      audioPlaying = true;
-      console.log('🔊 Audio playing');
-    } catch (err) {
-      console.error('Audio play failed:', err);
-      audioPlaying = false;
-    }
-  }
-
-  // Retry audio play on user interaction
-  async function retryAudio() {
-    if ($remoteStream && audioElement) {
-      try {
-        await audioElement.play();
+  // Play audio when remote stream changes
+  $: if ($remoteStream && audioRef) {
+    audioRef.srcObject = $remoteStream;
+    audioRef.play()
+      .then(() => {
         audioPlaying = true;
-      } catch (err) {
-        console.error('Retry failed:', err);
-      }
+        console.log('🔊 Audio playing');
+      })
+      .catch(err => {
+        console.error('Audio play failed:', err);
+        audioPlaying = false;
+      });
+  }
+
+  // Retry audio play on user tap
+  function retryAudio() {
+    if (audioRef && $remoteStream) {
+      audioRef.srcObject = $remoteStream;
+      audioRef.play()
+        .then(() => { audioPlaying = true; })
+        .catch(console.error);
     }
   }
 
-  // Handle answer with audio unlock
+  // Handle answer with audio unlock for mobile
   async function handleAnswer() {
-    // Create and play silent audio to unlock audio context on mobile
-    const silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+    // Play silent audio to unlock audio context
     try {
-      await silentAudio.play();
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start();
     } catch (e) {}
     
     await answerCall();
   }
-
-  onMount(() => {
-    // Create audio element
-    audioElement = new Audio();
-    audioElement.autoplay = true;
-    audioElement.playsInline = true;
-    
-    return () => {
-      if (audioElement) {
-        audioElement.srcObject = null;
-      }
-    };
-  });
 </script>
+
+<!-- Audio element for remote stream - always in DOM -->
+<audio 
+  bind:this={audioRef} 
+  autoplay 
+  playsinline
+  style="display: none;"
+></audio>
 
 {#if showModal}
   <div class="call-overlay">
@@ -86,7 +74,7 @@
           <span class="status">Voice Call Connected</span>
         </div>
 
-        <!-- Audio status indicator -->
+        <!-- Audio fix button for mobile -->
         {#if !audioPlaying && $remoteStream}
           <button class="audio-fix-btn" on:click={retryAudio}>
             <Volume2 size={18} />
@@ -224,19 +212,19 @@
     justify-content: center;
     gap: 8px;
     margin: 16px auto;
-    padding: 10px 20px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 20px;
+    padding: 12px 24px;
+    background: rgba(255, 152, 0, 0.15);
+    border: 1px solid rgba(255, 152, 0, 0.4);
+    border-radius: 24px;
     color: #ff9800;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     cursor: pointer;
     animation: blink 1.5s ease-in-out infinite;
   }
 
   @keyframes blink {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    50% { opacity: 0.6; }
   }
 
   .call-actions {
