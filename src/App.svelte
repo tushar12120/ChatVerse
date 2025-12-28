@@ -9,11 +9,9 @@
   import SearchUserModal from '@/lib/components/chat/SearchUserModal.svelte';
   import CreateGroupModal from '@/lib/components/chat/CreateGroupModal.svelte';
   import ProfileModal from '@/lib/components/profile/ProfileModal.svelte';
-  import CallModal from '@/lib/components/call/CallModal.svelte';
   import { user } from '@/lib/stores/auth';
   import { supabase } from '@/lib/supabase';
   import { chats } from '@/lib/stores/chat';
-  import { initCallListener, cleanupCallListener } from '@/lib/stores/call';
   import { fade, fly } from 'svelte/transition';
   import PermissionModal from '@/lib/components/ui/PermissionModal.svelte';
   
@@ -35,15 +33,11 @@
     return () => window.removeEventListener('resize', checkMobile);
   });
 
-  // Initialize call listener when user changes
+  // Show permission modal on first login
   $: if ($user) {
-    initCallListener($user.id);
-    // Show permission modal on first login
     if (!localStorage.getItem('permissions_requested')) {
       showPermissionModal = true;
     }
-  } else {
-    cleanupCallListener();
   }
 
   // Reactive: Update activeChat details when chats store updates
@@ -135,8 +129,6 @@
       />
     {/if}
     
-    <CallModal />
-
     {#if showPermissionModal}
       <PermissionModal on:close={() => showPermissionModal = false} />
     {/if}
