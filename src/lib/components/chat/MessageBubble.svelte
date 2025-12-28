@@ -3,18 +3,47 @@
   
   export let message: any;
   export let isMe: boolean;
+
+  // Detect message type
+  function isImageUrl(text: string): boolean {
+    return /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(text) || 
+           text.includes('storage/v1/object/public/chat-media');
+  }
+
+  function extractUrl(text: string): string | null {
+    const urlMatch = text.match(/https?:\/\/[^\s]+/);
+    return urlMatch ? urlMatch[0] : null;
+  }
+
+  $: url = extractUrl(message.text);
+  $: isImage = url && isImageUrl(url);
+  $: displayText = message.text.replace(/📎\s*[\w.-]+:\s*/, '').replace(url || '', '').trim();
 </script>
 
 <div class="message-wrapper" class:me={isMe}>
   <div class="bubble glass">
-    <p>{message.text}</p>
+    {#if isImage}
+      <a href={url} target="_blank" rel="noopener">
+        <img src={url} alt="Shared image" class="media-preview" />
+      </a>
+      {#if displayText}
+        <p class="caption">{displayText}</p>
+      {/if}
+    {:else if url}
+      <p>
+        {displayText || '📎 File:'}
+        <a href={url} target="_blank" rel="noopener" class="file-link">{url.split('/').pop()}</a>
+      </p>
+    {:else}
+      <p>{message.text}</p>
+    {/if}
     <div class="meta">
       <span class="time">{message.timestamp}</span>
       {#if isMe}
         <span class="status">
           {#if message.status === 'read'}
             <div class="read-icon">
-               <CheckCheck size={16} color="#40C4FF" strokeWidth={2.5} /> <!-- Bright Blue -->
+               <CheckCheck size={16} color="#40C4FF" strokeWidth={2.5} />
             </div>
           {:else if message.status === 'received'}
             <CheckCheck size={16} color="#aaa" />
@@ -86,5 +115,39 @@
   @keyframes popIn {
     from { transform: scale(0); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
+  }
+
+  .media-preview {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+
+  .media-preview:hover {
+    transform: scale(1.02);
+  }
+
+  .caption {
+    margin: 4px 0 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+  }
+
+  .file-link {
+    color: #40C4FF;
+    text-decoration: none;
+    word-break: break-all;
+  }
+
+  .file-link:hover {
+    text-decoration: underline;
+  }
+
+  p {
+    margin: 0;
+    word-wrap: break-word;
   }
 </style>

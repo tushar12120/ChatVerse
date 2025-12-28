@@ -14,7 +14,7 @@
   let showEmojiPicker = false;
   let fileInput: HTMLInputElement;
   
-  const commonEmojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '💯', '🙏', '👋', '🤝', '💪', '🙌', '😊'];
+  const commonEmojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '😡', '👍', '❤️', '🔥', '🎉', '💯', '🙏', '👋', '😊'];
   
   // Reload messages when chat changes
   $: if (activeChat?.id) {
@@ -346,15 +346,17 @@
     position: absolute;
     bottom: 60px;
     left: 0;
-    background: rgba(20, 20, 20, 0.95);
+    background: rgba(20, 20, 20, 0.98);
     border: 1px solid var(--glass-border);
     border-radius: 16px;
-    padding: 12px;
+    padding: 16px;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    width: 220px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    width: 200px;
+    max-height: 200px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
     z-index: 100;
   }
 
