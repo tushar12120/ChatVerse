@@ -29,13 +29,6 @@
     return () => window.removeEventListener('resize', checkMobile);
   });
 
-  // Initialize call listener when user changes
-  $: if ($user) {
-    initCallListener($user.id);
-  } else {
-    cleanupCallListener();
-  }
-
   // Reactive: Update activeChat details when chats store updates
   $: if (activeChat?.id && $chats.length > 0) {
       const updatedChat = $chats.find(c => c.id === activeChat.id);
@@ -113,9 +106,6 @@
     {#if showProfileModal}
       <ProfileModal on:close={() => showProfileModal = false} />
     {/if}
-    
-    <!-- Call Modal (Incoming/Outgoing Calls) -->
-    <CallModal />
   {/if}
 </main>
 

@@ -1,40 +1,16 @@
 <script lang="ts">
-  import { Phone, Video, MoreVertical, Send, Paperclip, Smile, X, ArrowLeft } from 'lucide-svelte';
+  import { MoreVertical, Send, Paperclip, Smile, X, ArrowLeft } from 'lucide-svelte';
   import { afterUpdate, createEventDispatcher } from 'svelte';
   import MessageBubble from './MessageBubble.svelte';
   import { messages, fetchMessages, sendMessage } from '@/lib/stores/chat';
   import { user } from '@/lib/stores/auth';
   import { toasts } from '@/lib/stores/toasts';
   import { supabase } from '@/lib/supabase';
-  import { startCall } from '@/lib/stores/call';
   
   export let activeChat: any;
   export let isMobile: boolean = false;
   
   const dispatch = createEventDispatcher();
-  
-  // Get the other user's ID for calling
-  async function getOtherUserId(): Promise<string | null> {
-    if (!activeChat?.id || activeChat.isSelf) return null;
-    
-    const { data } = await supabase
-      .from('participants')
-      .select('user_id')
-      .eq('chat_id', activeChat.id)
-      .neq('user_id', $user?.id)
-      .single();
-    
-    return data?.user_id || null;
-  }
-
-  async function handleCall(isVideo: boolean) {
-    const targetUserId = await getOtherUserId();
-    if (!targetUserId) {
-      toasts.error('Cannot call this user');
-      return;
-    }
-    startCall(activeChat.id, targetUserId, activeChat.name, isVideo);
-  }
 
   function handleBack() {
     dispatch('back');
@@ -141,10 +117,6 @@
       </div>
       
       <div class="actions">
-        {#if !activeChat.isSelf}
-          <button class="icon-btn" on:click={() => handleCall(true)} title="Video Call"><Video size={20} /></button>
-          <button class="icon-btn" on:click={() => handleCall(false)} title="Voice Call"><Phone size={20} /></button>
-        {/if}
         <button class="icon-btn"><MoreVertical size={20} /></button>
       </div>
     </header>
