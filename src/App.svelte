@@ -8,17 +8,26 @@
   import ChatWindow from '@/lib/components/chat/ChatWindow.svelte';
   import SearchUserModal from '@/lib/components/chat/SearchUserModal.svelte';
   import ProfileModal from '@/lib/components/profile/ProfileModal.svelte';
-  import CallModal from '@/lib/components/call/CallModal.svelte';
   import { user } from '@/lib/stores/auth';
   import { supabase } from '@/lib/supabase';
   import { chats } from '@/lib/stores/chat';
-  import { initCallListener, cleanupCallListener } from '@/lib/stores/call';
   import { fade, fly } from 'svelte/transition';
   
   let view: 'login' | 'register' = 'login';
   let activeChat: any = null;
   let showNewChatModal = false;
   let showProfileModal = false;
+  let isMobile = false;
+
+  // Check if mobile
+  onMount(() => {
+    const checkMobile = () => {
+      isMobile = window.innerWidth < 768;
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  });
 
   // Initialize call listener when user changes
   $: if ($user) {
@@ -39,6 +48,15 @@
   
   function switchView() {
     view = view === 'login' ? 'register' : 'login';
+  }
+
+  function handleChatSelect(e: CustomEvent) {
+    const chatId = e.detail.id || e.detail;
+    activeChat = $chats.find(c => c.id === chatId) || { id: chatId, name: 'Loading...', avatar: '' };
+  }
+
+  function handleBack() {
+    activeChat = null;
   }
 
   async function handleLogout() {
@@ -65,18 +83,21 @@
       {/key}
     </AuthLayout>
   {:else}
-    <div class="app-layout" in:fade>
-      <Sidebar 
-        activeChatId={activeChat?.id} 
-        on:newChat={() => showNewChatModal = true}
-        on:openProfile={() => showProfileModal = true}
-        on:click={(e) => {
-          const chatId = e.detail.id || e.detail; 
-          // Optimistically set active chat or find it
-          activeChat = $chats.find(c => c.id === chatId) || { id: chatId, name: 'Loading...', avatar: '' };
-        }} 
-      />
-      <ChatWindow {activeChat} />
+    <div class="app-layout" class:mobile={isMobile} in:fade>
+      <!-- Sidebar: Hidden on mobile when chat is open -->
+      <div class="sidebar-container" class:hidden={isMobile && activeChat}>
+        <Sidebar 
+          activeChatId={activeChat?.id} 
+          on:newChat={() => showNewChatModal = true}
+          on:openProfile={() => showProfileModal = true}
+          on:click={handleChatSelect}
+        />
+      </div>
+      
+      <!-- ChatWindow: Full screen on mobile -->
+      <div class="chat-container" class:hidden={isMobile && !activeChat}>
+        <ChatWindow {activeChat} {isMobile} on:back={handleBack} />
+      </div>
     </div>
 
     {#if showNewChatModal}
@@ -85,7 +106,6 @@
         on:select={(e) => {
           const chatId = e.detail;
           activeChat = { id: chatId, name: 'Loading...', avatar: '' };
-          // Store will auto-update activeChat via reactive statement below
         }}
       />
     {/if}
@@ -105,16 +125,62 @@
   main {
     width: 100%;
     min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
   }
   
   .app-layout {
     display: flex;
     height: 100vh;
+    height: 100dvh;
     width: 100%;
     overflow: hidden;
+  }
+
+  .sidebar-container {
+    width: 360px;
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+  }
+
+  .chat-container {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Mobile Styles */
+  .app-layout.mobile .sidebar-container {
+    width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+  }
+
+  .app-layout.mobile .chat-container {
+    width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+  }
+
+  .app-layout.mobile .hidden {
+    display: none;
   }
   
   .auth-wrapper {
     width: 100%;
+  }
+
+  /* Global mobile optimizations */
+  @media (max-width: 768px) {
+    :global(body) {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
   }
 </style>

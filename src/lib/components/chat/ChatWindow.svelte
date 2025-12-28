@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Phone, Video, MoreVertical, Send, Paperclip, Smile, X } from 'lucide-svelte';
-  import { afterUpdate } from 'svelte';
+  import { Phone, Video, MoreVertical, Send, Paperclip, Smile, X, ArrowLeft } from 'lucide-svelte';
+  import { afterUpdate, createEventDispatcher } from 'svelte';
   import MessageBubble from './MessageBubble.svelte';
   import { messages, fetchMessages, sendMessage } from '@/lib/stores/chat';
   import { user } from '@/lib/stores/auth';
@@ -9,6 +9,9 @@
   import { startCall } from '@/lib/stores/call';
   
   export let activeChat: any;
+  export let isMobile: boolean = false;
+  
+  const dispatch = createEventDispatcher();
   
   // Get the other user's ID for calling
   async function getOtherUserId(): Promise<string | null> {
@@ -31,6 +34,10 @@
       return;
     }
     startCall(activeChat.id, targetUserId, activeChat.name, isVideo);
+  }
+
+  function handleBack() {
+    dispatch('back');
   }
   
   let newMessage = '';
@@ -114,6 +121,11 @@
   {#if activeChat}
     <!-- Header -->
     <header class="chat-header glass">
+      {#if isMobile}
+        <button class="back-btn" on:click={handleBack}>
+          <ArrowLeft size={24} />
+        </button>
+      {/if}
       <div class="user-info">
         <img src={activeChat.avatar} alt={activeChat.name} class="avatar" />
         <div class="details">
@@ -202,25 +214,48 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); /* Subtle pattern */
+    height: 100dvh;
+    background: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
     background-blend-mode: overlay;
     background-color: rgba(0,0,0,0.5);
   }
 
   .chat-header {
-    padding: 0 24px;
-    height: 72px;
+    padding: 0 16px;
+    height: 64px;
+    min-height: 64px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    background: rgba(10, 10, 10, 0.8);
+    gap: 12px;
+    background: rgba(10, 10, 10, 0.9);
     border-bottom: 1px solid var(--glass-border);
+  }
+
+  .back-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 8px;
+    margin-left: -8px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .back-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .user-info {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
   }
 
   .avatar {

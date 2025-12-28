@@ -98,13 +98,21 @@
 
 <style>
   .sidebar {
-    width: 320px; /* Reduced width slightly for cleaner look */
+    width: 100%;
+    max-width: 360px;
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid rgba(255, 255, 255, 0.05); /* Softer border */
-    background: linear-gradient(180deg, rgba(10, 10, 10, 0.8) 0%, rgba(5, 5, 5, 0.95) 100%);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    background: linear-gradient(180deg, rgba(10, 10, 10, 0.95) 0%, rgba(5, 5, 5, 0.98) 100%);
     backdrop-filter: blur(20px);
+  }
+
+  @media (max-width: 768px) {
+    .sidebar {
+      max-width: 100%;
+    }
   }
 
   .header {
