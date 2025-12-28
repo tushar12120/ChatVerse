@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Phone, PhoneOff } from 'lucide-svelte';
+  import { Phone, PhoneOff, Volume2 } from 'lucide-svelte';
+  import { onMount } from 'svelte';
   import { callStatus, callData, answerCall, endCall, remoteStream } from '@/lib/stores/call';
 
   $: isIncoming = $callStatus === 'incoming';
@@ -7,27 +8,67 @@
   $: isConnected = $callStatus === 'connected';
   $: showModal = isIncoming || isCalling || isConnected;
 
-  // Svelte action to set srcObject on audio element
-  function srcObject(node: HTMLAudioElement, stream: MediaStream | null) {
-    if (stream) {
-      node.srcObject = stream;
-      node.play().catch(console.error);
+  let audioElement: HTMLAudioElement;
+  let audioPlaying = false;
+
+  // Play audio when remote stream is available
+  $: if ($remoteStream && audioElement) {
+    playAudio($remoteStream);
+  }
+
+  async function playAudio(stream: MediaStream) {
+    if (!audioElement) return;
+    
+    audioElement.srcObject = stream;
+    audioElement.muted = false;
+    audioElement.volume = 1;
+    
+    try {
+      await audioElement.play();
+      audioPlaying = true;
+      console.log('🔊 Audio playing');
+    } catch (err) {
+      console.error('Audio play failed:', err);
+      audioPlaying = false;
     }
-    return {
-      update(newStream: MediaStream | null) {
-        if (newStream) {
-          node.srcObject = newStream;
-          node.play().catch(console.error);
-        }
+  }
+
+  // Retry audio play on user interaction
+  async function retryAudio() {
+    if ($remoteStream && audioElement) {
+      try {
+        await audioElement.play();
+        audioPlaying = true;
+      } catch (err) {
+        console.error('Retry failed:', err);
+      }
+    }
+  }
+
+  // Handle answer with audio unlock
+  async function handleAnswer() {
+    // Create and play silent audio to unlock audio context on mobile
+    const silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+    try {
+      await silentAudio.play();
+    } catch (e) {}
+    
+    await answerCall();
+  }
+
+  onMount(() => {
+    // Create audio element
+    audioElement = new Audio();
+    audioElement.autoplay = true;
+    audioElement.playsInline = true;
+    
+    return () => {
+      if (audioElement) {
+        audioElement.srcObject = null;
       }
     };
-  }
+  });
 </script>
-
-<!-- Hidden audio element for playing remote audio -->
-{#if $remoteStream}
-  <audio use:srcObject={$remoteStream} autoplay />
-{/if}
 
 {#if showModal}
   <div class="call-overlay">
@@ -44,6 +85,14 @@
           <h3>{$callData?.callerName}</h3>
           <span class="status">Voice Call Connected</span>
         </div>
+
+        <!-- Audio status indicator -->
+        {#if !audioPlaying && $remoteStream}
+          <button class="audio-fix-btn" on:click={retryAudio}>
+            <Volume2 size={18} />
+            <span>Tap to enable audio</span>
+          </button>
+        {/if}
         
         <div class="call-actions">
           <button class="end-btn" on:click={endCall}>
@@ -63,7 +112,7 @@
           <button class="reject-btn" on:click={endCall}>
             <PhoneOff size={28} />
           </button>
-          <button class="accept-btn" on:click={answerCall}>
+          <button class="accept-btn" on:click={handleAnswer}>
             <Phone size={28} />
           </button>
         </div>
@@ -167,6 +216,27 @@
   .call-info .status {
     color: var(--primary);
     font-size: 0.9rem;
+  }
+
+  .audio-fix-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 16px auto;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    color: #ff9800;
+    font-size: 0.85rem;
+    cursor: pointer;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
 
   .call-actions {
