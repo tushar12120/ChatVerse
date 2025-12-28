@@ -12,14 +12,27 @@
   let loading = false;
   
   async function searchUsers() {
-    if (!query.trim()) return;
+    if (!query.trim()) {
+      users = [];
+      return;
+    }
+
+    // Validate: Must be exactly 10 digits
+    const cleanNumber = query.trim().replace(/\D/g, ''); // Remove non-digits
+    if (cleanNumber.length !== 10) {
+      toasts.error('Please enter a valid 10-digit mobile number');
+      users = [];
+      return;
+    }
+
     loading = true;
     
     try {
+      // EXACT MATCH - Full number required
       const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .ilike('full_name', `%${query}%`)
+      .eq('mobile_number', cleanNumber)
       .limit(5);
 
       if (error) throw error;
@@ -38,8 +51,9 @@
           dispatch('select', chatId);
           dispatch('close');
           toasts.success('Chat started!');
-      } catch (err) {
-          toasts.error('Could not start chat');
+      } catch (err: any) {
+          console.error('Start Chat Error:', err);
+          toasts.error(err.message || 'Could not start chat');
       }
   }
 </script>
@@ -52,13 +66,15 @@
     </div>
     
     <div class="search-box">
+      <div class="search-icon-wrapper">
+        <Search size={18} />
+      </div>
       <input 
         type="text" 
-        placeholder="Search users by name..." 
+        placeholder="Enter Full Mobile Number..." 
         bind:value={query}
-        on:input={searchUsers}
+        on:keydown={(e) => e.key === 'Enter' && searchUsers()}
       />
-      <Search size={18} class="search-icon" />
     </div>
 
     <div class="user-list custom-scroll">
@@ -93,44 +109,79 @@
   }
   
   .modal {
-    width: 400px;
-    background: #111;
-    border-radius: 16px;
+    width: 420px;
+    background: linear-gradient(145deg, rgba(15, 15, 15, 0.95), rgba(5, 5, 5, 0.98));
+    backdrop-filter: blur(20px);
+    border-radius: 20px;
     padding: 24px;
     border: 1px solid var(--glass-border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
   }
 
   .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
+  }
+
+  .header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
   }
   
   .close-btn {
-      background: none; border: none; color: white; cursor: pointer;
+      background: rgba(255, 255, 255, 0.05); 
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-muted); 
+      cursor: pointer;
+      border-radius: 50%;
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+  }
+
+  .close-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
   }
 
   .search-box {
       position: relative;
-      margin-bottom: 16px;
+      margin-bottom: 20px;
   }
   
   .search-box input {
       width: 100%;
-      padding: 12px 12px 12px 40px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.1);
-      border: none;
+      padding: 14px 14px 14px 44px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--glass-border);
       color: white;
+      font-size: 0.95rem;
+      outline: none;
+      box-sizing: border-box;
+      transition: all 0.2s ease;
+  }
+
+  .search-box input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(0, 230, 118, 0.1);
   }
   
-  .search-icon {
+  .search-icon-wrapper {
       position: absolute;
-      left: 12px;
+      left: 14px;
       top: 50%;
       transform: translateY(-50%);
-      color: #aaa;
+      color: var(--text-muted);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      z-index: 10;
   }
 
   .user-list {

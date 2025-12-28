@@ -1,18 +1,25 @@
 <script lang="ts">
-  import { Phone, Video, MoreVertical, Send, Paperclip, Smile } from 'lucide-svelte';
+  import { Phone, Video, MoreVertical, Send, Paperclip, Smile, X } from 'lucide-svelte';
   import { afterUpdate } from 'svelte';
   import MessageBubble from './MessageBubble.svelte';
   import { messages, fetchMessages, sendMessage } from '@/lib/stores/chat';
   import { user } from '@/lib/stores/auth';
+  import { toasts } from '@/lib/stores/toasts';
+  import { supabase } from '@/lib/supabase';
   
   export let activeChat: any;
   
   let newMessage = '';
   let chatContainer: HTMLElement;
+  let showEmojiPicker = false;
+  let fileInput: HTMLInputElement;
+  
+  const commonEmojis = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '😡', '👍', '👎', '❤️', '🔥', '🎉', '💯', '🙏', '👋', '🤝', '💪', '🙌', '😊'];
   
   // Reload messages when chat changes
   $: if (activeChat?.id) {
     fetchMessages(activeChat.id);
+    showEmojiPicker = false;
   }
   
   async function handleSend() {
@@ -28,6 +35,54 @@
     }
   }
 
+  function addEmoji(emoji: string) {
+    newMessage += emoji;
+    showEmojiPicker = false;
+  }
+
+  async function handleAttachment() {
+    fileInput.click();
+  }
+
+  async function uploadFile(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toasts.error('File too large. Max 5MB allowed.');
+      return;
+    }
+
+    try {
+      toasts.success('Uploading...');
+
+      const fileName = `${Date.now()}_${file.name}`;
+      const { data, error } = await supabase.storage
+        .from('chat-media')
+        .upload(`${activeChat.id}/${fileName}`, file);
+
+      if (error) throw error;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-media')
+        .getPublicUrl(`${activeChat.id}/${fileName}`);
+
+      // Send as message
+      await sendMessage(activeChat.id, `📎 ${file.name}: ${publicUrl}`, $user!.id);
+      toasts.success('File sent!');
+
+    } catch (err: any) {
+      console.error(err);
+      toasts.error(err.message || 'Failed to upload file');
+    }
+
+    // Reset input
+    target.value = '';
+  }
+
   afterUpdate(scrollToBottom);
 </script>
 
@@ -39,13 +94,21 @@
         <img src={activeChat.avatar} alt={activeChat.name} class="avatar" />
         <div class="details">
           <h3>{activeChat.name}</h3>
-          <span class="status">{activeChat.type === 'private' ? 'Available' : 'Group Chat'}</span>
+          <span class="status">
+            {#if activeChat.isSelf}
+              Message yourself
+            {:else}
+              {activeChat.type === 'group' ? 'Group Chat' : 'Online'}
+            {/if}
+          </span>
         </div>
       </div>
       
       <div class="actions">
-        <button class="icon-btn"><Video size={20} /></button>
-        <button class="icon-btn"><Phone size={20} /></button>
+        {#if !activeChat.isSelf}
+          <button class="icon-btn"><Video size={20} /></button>
+          <button class="icon-btn"><Phone size={20} /></button>
+        {/if}
         <button class="icon-btn"><MoreVertical size={20} /></button>
       </div>
     </header>
@@ -62,8 +125,26 @@
 
     <!-- Input -->
     <div class="input-area glass">
-      <button class="icon-btn"><Smile size={24} /></button>
-      <button class="icon-btn"><Paperclip size={24} /></button>
+      <div class="emoji-container">
+        <button class="icon-btn" on:click={() => showEmojiPicker = !showEmojiPicker}>
+          {#if showEmojiPicker}
+            <X size={24} />
+          {:else}
+            <Smile size={24} />
+          {/if}
+        </button>
+        
+        {#if showEmojiPicker}
+          <div class="emoji-picker">
+            {#each commonEmojis as emoji}
+              <button class="emoji-btn" on:click={() => addEmoji(emoji)}>{emoji}</button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      
+      <button class="icon-btn" on:click={handleAttachment}><Paperclip size={24} /></button>
+      <input type="file" bind:this={fileInput} on:change={uploadFile} hidden accept="image/*,video/*,.pdf,.doc,.docx" />
       
       <input 
         type="text" 
@@ -230,5 +311,65 @@
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
+    background: rgba(5, 5, 5, 0.7);
+    backdrop-filter: blur(5px);
+  }
+
+  .empty-content {
+    text-align: center;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 40px;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+
+  .empty-content h1 {
+    font-size: 2.5rem;
+    margin: 0 0 16px;
+    background: linear-gradient(135deg, #fff 0%, var(--primary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .empty-content p {
+    font-size: 1.1rem;
+    margin: 0;
+    opacity: 0.8;
+  }
+
+  .emoji-container {
+    position: relative;
+  }
+
+  .emoji-picker {
+    position: absolute;
+    bottom: 60px;
+    left: 0;
+    background: rgba(20, 20, 20, 0.95);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    width: 220px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    z-index: 100;
+  }
+
+  .emoji-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s;
+  }
+
+  .emoji-btn:hover {
+    background: rgba(255,255,255,0.1);
+    transform: scale(1.2);
   }
 </style>

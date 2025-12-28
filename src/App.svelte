@@ -5,6 +5,8 @@
   import ToastContainer from '@/lib/components/ui/ToastContainer.svelte';
   import Sidebar from '@/lib/components/chat/Sidebar.svelte';
   import ChatWindow from '@/lib/components/chat/ChatWindow.svelte';
+  import SearchUserModal from '@/lib/components/chat/SearchUserModal.svelte';
+  import ProfileModal from '@/lib/components/profile/ProfileModal.svelte';
   import { user } from '@/lib/stores/auth';
   import { supabase } from '@/lib/supabase';
   import { chats } from '@/lib/stores/chat';
@@ -12,6 +14,20 @@
   
   let view: 'login' | 'register' = 'login';
   let activeChat: any = null;
+  let showNewChatModal = false;
+  let showProfileModal = false;
+
+  // Reactive: Update activeChat details when chats store updates
+  $: if (activeChat?.id && $chats.length > 0) {
+      const updatedChat = $chats.find(c => c.id === activeChat.id);
+      if (updatedChat) {
+          // Preserve any local state if needed, but usually store is source of truth
+          // Only update if it was a placeholder (loading) or if data changed
+          if (activeChat.name === 'Loading...' || activeChat.name === 'New Chat') {
+             activeChat = updatedChat;
+          }
+      }
+  }
   
   function switchView() {
     view = view === 'login' ? 'register' : 'login';
@@ -44,18 +60,35 @@
     <div class="app-layout" in:fade>
       <Sidebar 
         activeChatId={activeChat?.id} 
+        on:newChat={() => showNewChatModal = true}
+        on:openProfile={() => showProfileModal = true}
         on:click={(e) => {
-          // If e.detail is a chat object (existing flow) or just ID (new chat modal)
           const chatId = e.detail.id || e.detail; 
-           // Wait for store to update or find it
-           // A simple way is to find it in $chats, if not found (newly created), we might need to rely on store update
-          activeChat = $chats.find(c => c.id === chatId) || { id: chatId, name: 'New Chat', avatar: '' };
+          // Optimistically set active chat or find it
+          activeChat = $chats.find(c => c.id === chatId) || { id: chatId, name: 'Loading...', avatar: '' };
         }} 
       />
       <ChatWindow {activeChat} />
     </div>
+
+    {#if showNewChatModal}
+      <SearchUserModal 
+        on:close={() => showNewChatModal = false} 
+        on:select={(e) => {
+          const chatId = e.detail;
+          activeChat = { id: chatId, name: 'Loading...', avatar: '' };
+          // Store will auto-update activeChat via reactive statement below
+        }}
+      />
+    {/if}
+
+    {#if showProfileModal}
+      <ProfileModal on:close={() => showProfileModal = false} />
+    {/if}
   {/if}
 </main>
+
+
 
 <style>
   main {

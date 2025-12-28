@@ -13,11 +13,13 @@
       {#if isMe}
         <span class="status">
           {#if message.status === 'read'}
-            <CheckCheck size={14} color="#00e676" />
+            <div class="read-icon">
+               <CheckCheck size={16} color="#40C4FF" strokeWidth={2.5} /> <!-- Bright Blue -->
+            </div>
           {:else if message.status === 'received'}
-            <CheckCheck size={14} color="#aaa" />
+            <CheckCheck size={16} color="#aaa" />
           {:else}
-            <Check size={14} color="#aaa" />
+            <Check size={16} color="#aaa" />
           {/if}
         </span>
       {/if}
@@ -72,5 +74,17 @@
   
   .status {
     display: flex;
+    align-items: center;
+  }
+
+  .read-icon {
+    display: flex;
+    filter: drop-shadow(0 0 4px rgba(64, 196, 255, 0.5)); /* The 'Blur' Glow Effect */
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes popIn {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
   }
 </style>
