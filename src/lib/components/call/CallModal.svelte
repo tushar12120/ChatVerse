@@ -1,12 +1,33 @@
 <script lang="ts">
   import { Phone, PhoneOff } from 'lucide-svelte';
-  import { callStatus, callData, answerCall, endCall } from '@/lib/stores/call';
+  import { callStatus, callData, answerCall, endCall, remoteStream } from '@/lib/stores/call';
 
   $: isIncoming = $callStatus === 'incoming';
   $: isCalling = $callStatus === 'calling';
   $: isConnected = $callStatus === 'connected';
   $: showModal = isIncoming || isCalling || isConnected;
+
+  // Svelte action to set srcObject on audio element
+  function srcObject(node: HTMLAudioElement, stream: MediaStream | null) {
+    if (stream) {
+      node.srcObject = stream;
+      node.play().catch(console.error);
+    }
+    return {
+      update(newStream: MediaStream | null) {
+        if (newStream) {
+          node.srcObject = newStream;
+          node.play().catch(console.error);
+        }
+      }
+    };
+  }
 </script>
+
+<!-- Hidden audio element for playing remote audio -->
+{#if $remoteStream}
+  <audio use:srcObject={$remoteStream} autoplay />
+{/if}
 
 {#if showModal}
   <div class="call-overlay">
