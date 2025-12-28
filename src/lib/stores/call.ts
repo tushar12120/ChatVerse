@@ -12,7 +12,7 @@ export const callData = writable<{
     chatId: string;
     callerId: string;
     callerName: string;
-    isVideo: boolean;
+    offer?: RTCSessionDescriptionInit;
 } | null>(null);
 
 let peerConnection: RTCPeerConnection | null = null;
@@ -26,9 +26,8 @@ const rtcConfig: RTCConfiguration = {
     ]
 };
 
-// Initialize Call Listener (Run on app load)
+// Initialize Call Listener
 export async function initCallListener(userId: string) {
-    // Listen for incoming calls on this user's channel
     callChannel = supabase
         .channel(`calls:${userId}`)
         .on('broadcast', { event: 'incoming-call' }, async (payload) => {
@@ -37,7 +36,7 @@ export async function initCallListener(userId: string) {
             callStatus.set('incoming');
         })
         .on('broadcast', { event: 'call-answered' }, async (payload) => {
-            console.log('Call answered, setting remote description');
+            console.log('Call answered');
             const answer = payload.payload.answer;
             if (peerConnection && answer) {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
@@ -45,7 +44,6 @@ export async function initCallListener(userId: string) {
             }
         })
         .on('broadcast', { event: 'ice-candidate' }, async (payload) => {
-            console.log('Received ICE candidate');
             if (peerConnection && payload.payload.candidate) {
                 await peerConnection.addIceCandidate(new RTCIceCandidate(payload.payload.candidate));
             }
@@ -56,8 +54,8 @@ export async function initCallListener(userId: string) {
         .subscribe();
 }
 
-// Start a Call
-export async function startCall(chatId: string, targetUserId: string, targetUserName: string, isVideo: boolean) {
+// Start Voice Call (Audio Only)
+export async function startCall(chatId: string, targetUserId: string, targetUserName: string) {
     try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -66,32 +64,26 @@ export async function startCall(chatId: string, targetUserId: string, targetUser
         callData.set({
             chatId,
             callerId: user.id,
-            callerName: user.user_metadata?.full_name || 'User',
-            isVideo
+            callerName: user.user_metadata?.full_name || 'User'
         });
 
-        // Get local media
+        // Get audio only
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
-            video: isVideo
+            video: false
         });
         localStream.set(stream);
 
-        // Create peer connection
         peerConnection = new RTCPeerConnection(rtcConfig);
 
-        // Add local tracks
         stream.getTracks().forEach(track => {
             peerConnection!.addTrack(track, stream);
         });
 
-        // Handle remote stream
         peerConnection.ontrack = (event) => {
-            console.log('Received remote track');
             remoteStream.set(event.streams[0]);
         };
 
-        // Handle ICE candidates
         peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
                 supabase.channel(`calls:${targetUserId}`).send({
@@ -102,11 +94,9 @@ export async function startCall(chatId: string, targetUserId: string, targetUser
             }
         };
 
-        // Create offer
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
 
-        // Send call invitation
         await supabase.channel(`calls:${targetUserId}`).send({
             type: 'broadcast',
             event: 'incoming-call',
@@ -114,7 +104,6 @@ export async function startCall(chatId: string, targetUserId: string, targetUser
                 chatId,
                 callerId: user.id,
                 callerName: user.user_metadata?.full_name || 'User',
-                isVideo,
                 offer
             }
         });
@@ -128,7 +117,7 @@ export async function startCall(chatId: string, targetUserId: string, targetUser
     }
 }
 
-// Answer a Call
+// Answer Call
 export async function answerCall() {
     try {
         const data = get(callData);
@@ -137,28 +126,22 @@ export async function answerCall() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Get local media
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
-            video: data.isVideo
+            video: false
         });
         localStream.set(stream);
 
-        // Create peer connection
         peerConnection = new RTCPeerConnection(rtcConfig);
 
-        // Add local tracks
         stream.getTracks().forEach(track => {
             peerConnection!.addTrack(track, stream);
         });
 
-        // Handle remote stream
         peerConnection.ontrack = (event) => {
-            console.log('Received remote track');
             remoteStream.set(event.streams[0]);
         };
 
-        // Handle ICE candidates
         peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
                 supabase.channel(`calls:${data.callerId}`).send({
@@ -169,15 +152,13 @@ export async function answerCall() {
             }
         };
 
-        // Set remote description (the offer)
-        // @ts-ignore
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        if (data.offer) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        }
 
-        // Create answer
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
 
-        // Send answer back
         await supabase.channel(`calls:${data.callerId}`).send({
             type: 'broadcast',
             event: 'call-answered',
@@ -194,21 +175,18 @@ export async function answerCall() {
     }
 }
 
-// Reject/End Call
+// End Call
 export function endCall() {
-    // Stop local stream
     const local = get(localStream);
     if (local) {
         local.getTracks().forEach(track => track.stop());
     }
 
-    // Close peer connection
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
     }
 
-    // Notify other party
     const data = get(callData);
     if (data) {
         supabase.channel(`calls:${data.callerId}`).send({
@@ -218,14 +196,12 @@ export function endCall() {
         });
     }
 
-    // Reset state
     callStatus.set('idle');
     callData.set(null);
     remoteStream.set(null);
     localStream.set(null);
 }
 
-// Cleanup on logout
 export function cleanupCallListener() {
     if (callChannel) {
         supabase.removeChannel(callChannel);

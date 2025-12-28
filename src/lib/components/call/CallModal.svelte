@@ -1,21 +1,11 @@
 <script lang="ts">
-  import { Phone, PhoneOff, Video } from 'lucide-svelte';
-  import { callStatus, callData, answerCall, endCall, localStream, remoteStream } from '@/lib/stores/call';
+  import { Phone, PhoneOff } from 'lucide-svelte';
+  import { callStatus, callData, answerCall, endCall } from '@/lib/stores/call';
 
   $: isIncoming = $callStatus === 'incoming';
   $: isCalling = $callStatus === 'calling';
   $: isConnected = $callStatus === 'connected';
   $: showModal = isIncoming || isCalling || isConnected;
-
-  // Svelte action to set srcObject on video elements
-  function srcObject(node: HTMLVideoElement, stream: MediaStream | null) {
-    node.srcObject = stream;
-    return {
-      update(newStream: MediaStream | null) {
-        node.srcObject = newStream;
-      }
-    };
-  }
 </script>
 
 {#if showModal}
@@ -24,35 +14,14 @@
       
       {#if isConnected}
         <!-- Connected Call View -->
-        <div class="video-container">
-          {#if $remoteStream}
-            <video 
-              class="remote-video" 
-              autoplay 
-              playsinline
-              use:srcObject={$remoteStream}
-            />
-          {:else}
-            <div class="audio-call-bg">
-              <div class="pulse-ring"></div>
-              <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${$callData?.callerName}`} alt="" class="caller-avatar" />
-            </div>
-          {/if}
-          
-          {#if $localStream && $callData?.isVideo}
-            <video 
-              class="local-video" 
-              autoplay 
-              muted 
-              playsinline
-              use:srcObject={$localStream}
-            />
-          {/if}
+        <div class="connected-view">
+          <div class="pulse-ring"></div>
+          <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${$callData?.callerName}`} alt="" class="caller-avatar" />
         </div>
         
         <div class="call-info">
           <h3>{$callData?.callerName}</h3>
-          <span class="status">Connected</span>
+          <span class="status">Voice Call Connected</span>
         </div>
         
         <div class="call-actions">
@@ -66,7 +35,7 @@
         <div class="incoming-view">
           <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${$callData?.callerName}`} alt="" class="caller-avatar large" />
           <h2>{$callData?.callerName}</h2>
-          <p>{$callData?.isVideo ? 'Video Call' : 'Voice Call'}</p>
+          <p>Voice Call</p>
         </div>
         
         <div class="call-actions incoming">
@@ -74,11 +43,7 @@
             <PhoneOff size={28} />
           </button>
           <button class="accept-btn" on:click={answerCall}>
-            {#if $callData?.isVideo}
-              <Video size={28} />
-            {:else}
-              <Phone size={28} />
-            {/if}
+            <Phone size={28} />
           </button>
         </div>
 
@@ -116,48 +81,21 @@
   }
 
   .call-modal {
-    width: 400px;
-    max-width: 95vw;
+    width: 360px;
+    max-width: 90vw;
     background: linear-gradient(145deg, rgba(20, 20, 20, 0.98), rgba(5, 5, 5, 0.99));
     border-radius: 24px;
-    padding: 32px;
+    padding: 40px 32px;
     text-align: center;
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .video-container {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 4/3;
-    background: #111;
-    border-radius: 16px;
-    overflow: hidden;
-    margin-bottom: 20px;
-  }
-
-  .remote-video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .local-video {
-    position: absolute;
-    bottom: 12px;
-    right: 12px;
-    width: 100px;
-    height: 75px;
-    border-radius: 8px;
-    object-fit: cover;
-    border: 2px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .audio-call-bg {
+  .connected-view {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100%;
     position: relative;
+    margin-bottom: 24px;
   }
 
   .pulse-ring {
@@ -175,8 +113,8 @@
   }
 
   .caller-avatar {
-    width: 80px;
-    height: 80px;
+    width: 100px;
+    height: 100px;
     border-radius: 50%;
     z-index: 1;
   }
@@ -184,7 +122,6 @@
   .caller-avatar.large {
     width: 120px;
     height: 120px;
-    margin-bottom: 20px;
   }
 
   .incoming-view, .calling-view {
@@ -192,7 +129,7 @@
   }
 
   .incoming-view h2, .calling-view h2 {
-    margin: 0 0 8px;
+    margin: 20px 0 8px;
     font-size: 1.5rem;
   }
 
@@ -203,6 +140,7 @@
 
   .call-info h3 {
     margin: 0 0 4px;
+    font-size: 1.3rem;
   }
 
   .call-info .status {
@@ -214,7 +152,7 @@
     display: flex;
     justify-content: center;
     gap: 24px;
-    margin-top: 24px;
+    margin-top: 32px;
   }
 
   .call-actions.incoming {
@@ -224,8 +162,8 @@
   .end-btn, .reject-btn {
     background: #e53935;
     border: none;
-    width: 60px;
-    height: 60px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     color: white;
     cursor: pointer;
@@ -238,8 +176,8 @@
   .accept-btn {
     background: var(--primary);
     border: none;
-    width: 60px;
-    height: 60px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     color: black;
     cursor: pointer;
