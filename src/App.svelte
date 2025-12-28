@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import AuthLayout from '@/lib/components/auth/AuthLayout.svelte';
   import Login from '@/lib/components/auth/Login.svelte';
   import Register from '@/lib/components/auth/Register.svelte';
@@ -7,9 +8,11 @@
   import ChatWindow from '@/lib/components/chat/ChatWindow.svelte';
   import SearchUserModal from '@/lib/components/chat/SearchUserModal.svelte';
   import ProfileModal from '@/lib/components/profile/ProfileModal.svelte';
+  import CallModal from '@/lib/components/call/CallModal.svelte';
   import { user } from '@/lib/stores/auth';
   import { supabase } from '@/lib/supabase';
   import { chats } from '@/lib/stores/chat';
+  import { initCallListener, cleanupCallListener } from '@/lib/stores/call';
   import { fade, fly } from 'svelte/transition';
   
   let view: 'login' | 'register' = 'login';
@@ -17,12 +20,17 @@
   let showNewChatModal = false;
   let showProfileModal = false;
 
+  // Initialize call listener when user changes
+  $: if ($user) {
+    initCallListener($user.id);
+  } else {
+    cleanupCallListener();
+  }
+
   // Reactive: Update activeChat details when chats store updates
   $: if (activeChat?.id && $chats.length > 0) {
       const updatedChat = $chats.find(c => c.id === activeChat.id);
       if (updatedChat) {
-          // Preserve any local state if needed, but usually store is source of truth
-          // Only update if it was a placeholder (loading) or if data changed
           if (activeChat.name === 'Loading...' || activeChat.name === 'New Chat') {
              activeChat = updatedChat;
           }
@@ -85,6 +93,9 @@
     {#if showProfileModal}
       <ProfileModal on:close={() => showProfileModal = false} />
     {/if}
+    
+    <!-- Call Modal (Incoming/Outgoing Calls) -->
+    <CallModal />
   {/if}
 </main>
 
